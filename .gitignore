@@ -1,0 +1,5 @@
+**/.*
+objs/
+!.gitignore
+compile_commands.json
+

@@ -1,0 +1,118 @@
+#include "parser/parser_structs.hpp"
+
+#include <algorithm>
+#include <iterator>
+#include <memory>
+#include <span>
+#include <type_traits>
+#include "utils/utils.hpp"
+
+std::shared_ptr<InterpreterNode> NULL_NODE = makeLiteralNil();
+
+EvaluationResult<InterpreterNodePtr> Identifier::evaluate(std::shared_ptr<InterpreterNode> self, Interpreter& interpreter) const {
+  return self;
+}
+
+template <class T>
+requires std::is_base_of_v<InterpreterNode, T>
+static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& interpreter, std::span<const std::shared_ptr<T>> nodes) {
+  std::vector<std::shared_ptr<InterpreterNode>> mapped;
+  for (auto v : nodes) {
+    mapped.emplace_back(get_or_ret(v->evaluate(v, interpreter)));
+  }
+
+  return mapped;
+}
+
+template <class T>
+requires std::is_base_of_v<InterpreterNode, T>
+static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& interpreter, const std::vector<std::shared_ptr<T>>& nodes) {
+  return eval<T>(interpreter, std::span{nodes});
+}
+
+EvaluationResult<InterpreterNodePtr> Program::evaluate(std::shared_ptr<InterpreterNode> self, Interpreter& interpreter) const {
+  std::vector<std::shared_ptr<InterpreterNode>> mapped = get_or_ret(eval<Element>(interpreter, this->elements));
+  
+  return NULL_NODE;
+}
+
+
+EvaluationResult<InterpreterNodePtr> List::evaluate(std::shared_ptr<InterpreterNode> self, Interpreter& interpreter) const {
+  auto& elements = this->elements;
+
+  Atom* f_name;
+  if (elements.size() > 0) {
+    assert((f_name = dynamic_cast<Atom*>(elements[0].get())) != nullptr, "first element of called list must be Atom")
+    std::string_view name = f_name->identifier->name;
+
+    auto node = interpreter.get_context().get(name);
+    assert(dynamic_cast<CallableNode*>(node.get()) != nullptr, "attempt to call not-callable");
+
+    for (auto cur = elements.rbegin(); cur != elements.rend() - 1; cur++) {
+      interpreter.get_stack().push(*cur);
+    }
+      
+    return node->evaluate(node, interpreter);
+  } else {
+    return self;
+  }
+}
+
+EvaluationResult<InterpreterNodePtr> Atom::evaluate(
+  std::shared_ptr<InterpreterNode> self,
+  Interpreter& interpreter
+) const {
+  std::shared_ptr<InterpreterNode> value = interpreter.get_context().get(this->identifier->name);
+  assert(value, "there is no variable with name %s", this->identifier->name.c_str());
+  return value;
+}
+
+EvaluationResult<InterpreterNodePtr> Literal::evaluate(
+  std::shared_ptr<InterpreterNode> self,
+  Interpreter& Interpreter
+) const {
+  return self;
+}
+
+static int boolToInt(bool v) { return v ? 1 : 0; }
+
+
+bool Literal::less(const Literal& literal) const {
+  assert(this->type == Literal::Type::NULLVAL, "Cannot compare NULL");
+  assert(literal.type == Literal::Type::NULLVAL, "Cannot compare NULL");
+  switch (this->type) {
+    case Literal::Type::BOOLEAN: {
+                                   switch (literal.type) {
+                                     case Literal::Type::BOOLEAN:
+                                       return boolToInt(this->boolValue) < boolToInt(literal.boolValue);
+                                     case Literal::Type::REAL:
+                                       return boolToInt(this->boolValue) < literal.realValue;
+                                     case Literal::Type::INTEGER:
+                                       return boolToInt(this->boolValue) < literal.intValue;
+                                   }
+                                 }
+    case Literal::Type::INTEGER: {
+                                   switch (literal.type) {
+                                     case Literal::Type::BOOLEAN:
+                                       return this->intValue < boolToInt(literal.boolValue);
+                                     case Literal::Type::REAL:
+                                       return this->intValue < literal.realValue;
+                                     case Literal::Type::INTEGER:
+                                       return this->intValue < literal.intValue;
+                                   }
+                                 }
+    case Literal::Type::REAL: {
+                                   switch (literal.type) {
+                                     case Literal::Type::BOOLEAN:
+                                       return this->realValue < boolToInt(literal.boolValue);
+                                     case Literal::Type::REAL:
+                                       return this->realValue < literal.realValue;
+                                     case Literal::Type::INTEGER:
+                                       return this->realValue < literal.intValue;
+                                   }
+                                 }
+  }
+
+  assert(false, "impossible");
+}
+
