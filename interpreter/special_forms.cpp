@@ -112,10 +112,15 @@ public:
       std::shared_ptr<InterpreterNode> self,
       Interpreter& interpreter
     ) const override {
-    auto tok = interpreter.get_context().create_layer();
+    std::vector<InterpreterNodePtr> evaluated;
     auto args = get_args(interpreter, arg_names.size());
     for (int i = 0; i < args.size(); i++) {
-      interpreter.get_context().set(arg_names[i], args[i]);
+      evaluated.emplace_back(get_or_ret(eval(interpreter, args[i])));
+    }
+
+    auto tok = interpreter.get_context().create_layer();
+    for (int i = 0; i < args.size(); i++) {
+      interpreter.get_context().set(arg_names[i], evaluated[i]);
     }
     
     auto r = body->evaluate(body, interpreter);
@@ -164,7 +169,7 @@ public:
 
 class FuncSpecialNode : public SpecialFormNode {
 public:
-  std::string description() const override { return "lambda"; }
+  std::string description() const override { return "func"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
