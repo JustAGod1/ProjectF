@@ -17,6 +17,8 @@
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include <utility>
+#include <gsl/pointers>
+
 
 #include "utils/utils.hpp"
 #include "interpreter/special_forms.hpp"
@@ -27,6 +29,9 @@ class InterpreterNode;
 
 template <typename R>
 class EvaluationResultThrowed;
+
+template<typename T>
+using NotNullSharedPtr = gsl::not_null<std::shared_ptr<T>>;
 
 enum class EvaluationResultType { OK, BREAK, RETURN };
 template <typename R>
@@ -89,12 +94,12 @@ public:
     return EvaluationResultThrowed{return_value, type};
   }
   
-  R& get_value() { 
+  const R& get_value() const { 
     assert_unverbose(type == EvaluationResultType::OK, "should be ok");
     return value;
   }
 
-  R& get_return() { 
+  const R& get_return() const { 
     bool kek;
     assert_unverbose(type == EvaluationResultType::RETURN, "should be return");
     return value;
@@ -133,7 +138,8 @@ public:
 
   virtual EvaluationResult<std::shared_ptr<InterpreterNode>> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& Interpreter
+      Interpreter& Interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const = 0;
 
   virtual void print(std::ostream& out, int indent = 0) const = 0;
@@ -229,19 +235,18 @@ class EvaluatonException;
 class Interpreter {
 private:
   Context context;
-  InterpreterStack stack;
   const std::string_view source;
 
   friend class EvaluatonException;
 
   [[noreturn]]
-  void exit_fatal(std::string message, const InterpreterNode& node) const {
+  void exit_fatal(std::string message, const InterpreterNode* node) const {
       fmt::println("Condition failed: {}", message);
-      if (node.location.has_value()) {
-        node.location.value().print_line_error(source, std::cout);
+      if (node && node->location.has_value()) {
+        node->location.value().print_line_error(source, std::cout);
         std::cout << std::endl;
       } else {
-        fmt::println("Given node {} has no location", node.to_string());
+        fmt::println("Given node {} has no location", node ? node->to_string() : "nullptr");
       }
 
       exit(1);
@@ -254,17 +259,16 @@ public:
 
   template<typename LikeBool, typename... Args>
   void assert_verbose(const InterpreterNodePtr& node, LikeBool condition, const char* fmt, Args&&... args) const {
-    assert_verbose(*node.get(), condition, fmt, args...);
+    assert_verbose(node.get(), condition, fmt, args...);
   }
   template<typename LikeBool, typename... Args>
-  void assert_verbose(const InterpreterNode& node, LikeBool condition, const char* fmt, Args&&... args) const {
+  void assert_verbose(const InterpreterNode* node, LikeBool condition, const char* fmt, Args&&... args) const {
     if (!condition) {
       exit_fatal(fmt::format(fmt::runtime(fmt), args...), node);
     }
   }
 
   Context& get_context() { return context; }
-  InterpreterStack& get_stack() { return stack; }
 };
 
 class EvaluatonException : public std::exception {
@@ -278,7 +282,7 @@ public:
 
   [[noreturn]]
   void exit_fatal(const Interpreter& interpreter, InterpreterNodePtr node) {
-    interpreter.exit_fatal(std::move(message), *node.get());
+    interpreter.exit_fatal(std::move(message), node.get());
   }
 
   template<typename... Args>

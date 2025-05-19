@@ -45,7 +45,8 @@ public:
     }
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
-        Interpreter& Interpreter
+        Interpreter& Interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
       ) const override;
 };
 
@@ -67,7 +68,8 @@ public:
     }
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
-        Interpreter& Interpreter
+        Interpreter& Interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
       ) const override;
 };
 
@@ -79,14 +81,17 @@ public:
     List(std::optional<NodeLocation> location, std::vector<InterpreterNodePtr> elements) : Element(location), elements(std::move(elements)) {}
 
     void print(std::ostream& out, int indent = 0) const override {
-        out << std::string(indent, ' ') << "List:\n";
+      out << "(";
         for (const auto& el : elements) {
-            el->print(out, indent + 2);
+            el->print(out, 0);
+            out << " ";
         }
+      out << ")";
     }
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
-        Interpreter& Interpreter
+        Interpreter& Interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
       ) const override;
 };
 
@@ -104,7 +109,8 @@ public:
 
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
-        Interpreter& Interpreter
+        Interpreter& Interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
       ) const override;
 };
 
@@ -123,7 +129,8 @@ public:
 
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
-        Interpreter& Interpreter
+        Interpreter& Interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
       ) const override;
 };
 
@@ -163,12 +170,12 @@ public:
             case Type::BOOLEAN: out << (boolValue ? "true" : "false"); break;
             case Type::NULLVAL: out << "null"; break;
         }
-        out << "\n";
     }
 
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
-        Interpreter& Interpreter
+        Interpreter& Interpreter,
+        std::deque<std::shared_ptr<InterpreterNode>> args
       ) const override;
 
     bool less(const Interpreter& interpreter, const Literal& literal) const;

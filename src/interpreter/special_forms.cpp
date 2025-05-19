@@ -1,6 +1,7 @@
 #include "interpreter/special_forms.hpp"
 
 #include <algorithm>
+#include <deque>
 #include <iostream>
 #include <tuple>
 #include <iterator>
@@ -16,28 +17,13 @@
 #include "parser/parser_structs.hpp"
 #include "utils/utils.hpp"
 
-static std::vector<std::shared_ptr<InterpreterNode>> get_args(InterpreterNodePtr node, Interpreter& interpreter, int count) {
-  EvaluatonException::throw_if_false(interpreter.get_stack().available() == count,
+static std::deque<InterpreterNodePtr>& expect_n_args(std::deque<InterpreterNodePtr>& args, int n) {
+  EvaluatonException::throw_if_false(args.size() >= n,
       "Expected {} arguments but got {}",
-      count,
-      interpreter.get_stack().available()
-      );
-
-  std::vector<std::shared_ptr<InterpreterNode>> result;
-  for (int i = 0; i < count; i++) {
-    result.emplace_back(interpreter.get_stack().pop(interpreter, node));
-  }
-  
-  return result;
-}
-
-static std::vector<std::shared_ptr<InterpreterNode>> get_all_args(InterpreterNodePtr node, Interpreter& interpreter) {
-  std::vector<std::shared_ptr<InterpreterNode>> result;
-  while (!interpreter.get_stack().is_empty()) {
-    result.emplace_back(interpreter.get_stack().pop(interpreter, node));
-  }
-  
-  return result;
+      n,
+      args.size()
+    );
+  return args;
 }
 
 class SpecialFormNode : public CallableNode {
@@ -54,14 +40,15 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    return get_args(self, interpreter, 1)[0];
+    return expect_n_args(args, 1)[0];
   }
 };
 
 static EvaluationResult<std::shared_ptr<InterpreterNode>> eval(Interpreter& interpreter, std::shared_ptr<InterpreterNode> node) {
-  return node->evaluate(node, interpreter);
+  return node->evaluate(node, interpreter, std::deque<InterpreterNodePtr>{});
 }
 
 template <class Derive>
@@ -69,12 +56,9 @@ static EvaluationResult<std::shared_ptr<Derive>> eval_to_type(Interpreter& inter
   auto raw = get_or_ret(eval(interpreter, node));
   auto downcasted = std::dynamic_pointer_cast<Derive>(raw);
   if (!downcasted) {
-    std::ostringstream sstream{};
-    node->print(sstream);
-    interpreter.assert_verbose(*node.get(),
+    interpreter.assert_verbose(node.get(),
         downcasted,
-        "{} expected to be evaluated to {} but evaluated to {}",
-        sstream.str().c_str(),
+        "Expected to be evaluated to {} but evaluated to {}",
         typeid(Derive).name(),
         typeid(raw.get()).name());
   }
@@ -86,7 +70,7 @@ static EvaluationResult<bool> eval_to_bool(Interpreter& interpreter, std::shared
   if (literal->type != Literal::Type::BOOLEAN) {
     std::ostringstream sstream{};
     node->print(sstream);
-    interpreter.assert_verbose(*node.get(),
+    interpreter.assert_verbose(node.get(),
         literal->type != Literal::Type::BOOLEAN,
         "{} expected to be evaluated to BOOLEAN but evaluated to {}",
         sstream.str().c_str(),
@@ -99,7 +83,7 @@ static EvaluationResult<bool> eval_to_bool(Interpreter& interpreter, std::shared
 template <class Derive>
 std::shared_ptr<Derive> force_downcast(const Interpreter& interpreter, InterpreterNodePtr base) {
   auto downcasted = std::dynamic_pointer_cast<Derive>(base);
-  interpreter.assert_verbose(*base.get(), downcasted, "Failed to cast {} to {}", typeid(*base).name(), typeid(Derive).name());
+  interpreter.assert_verbose(base.get(), downcasted, "Failed to cast {} to {}", base ? typeid(*base).name() : "nullptr", typeid(Derive).name());
   return downcasted;
 }
 
@@ -109,9 +93,10 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<std::shared_ptr<InterpreterNode>> args = get_args(self, interpreter, 2);
+    expect_n_args(args, 2);
 
     auto maybe_atom = force_downcast<Atom>(interpreter, args[0]);
     
@@ -133,10 +118,11 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
     std::vector<InterpreterNodePtr> evaluated;
-    auto args = get_args(self, interpreter, arg_names.size());
+    expect_n_args(args, arg_names.size());
     for (int i = 0; i < args.size(); i++) {
       evaluated.emplace_back(get_or_ret(eval(interpreter, args[i])));
     }
@@ -146,8 +132,8 @@ public:
       interpreter.get_context().set(arg_names[i], evaluated[i]);
     }
     
-    auto r = body->evaluate(body, interpreter);
-    
+    auto r = eval(interpreter, body);
+
     if (r.is_ret()) {
       return r.get_return();
     }
@@ -172,9 +158,10 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<std::shared_ptr<InterpreterNode>> args = get_args(self, interpreter, 2);
+    expect_n_args(args, 2);
 
     auto maybe_list = force_downcast<List>(interpreter, args[0]);
 
@@ -196,9 +183,10 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<std::shared_ptr<InterpreterNode>> args = get_args(self, interpreter, 3);
+    expect_n_args(args, 3);
 
     auto maybe_atom = force_downcast<Atom>(interpreter, args[0]);
 
@@ -226,18 +214,20 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<InterpreterNodePtr> args;
-    args.emplace_back(interpreter.get_stack().pop(interpreter, self));
-    args.emplace_back(interpreter.get_stack().pop(interpreter, self));
+    EvaluatonException::throw_if_false(args.size() >= 2,
+        "cond expects at least 2 args got {}",
+        args.size());
+    EvaluatonException::throw_if_false(args.size() <= 3,
+      "cond expects at most 3 args got {}",
+      args.size()
+        );
 
     InterpreterNodePtr true_branch = args[1];
-    std::optional<InterpreterNodePtr> else_branch = interpreter.get_stack().pop_or_null();
+    std::optional<InterpreterNodePtr> else_branch = args.size() == 3 ? std::optional{args[2]} : std::nullopt;
 
-    EvaluatonException::throw_if_false(interpreter.get_stack().is_empty(),
-      "cond expects at least 3 args"
-        );
 
     auto condition = args[0];
     auto evaluated = get_or_ret(eval_to_bool(interpreter, condition));
@@ -258,9 +248,10 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<InterpreterNodePtr> args = get_args(self, interpreter, 2);
+    expect_n_args(args, 2);
 
     auto condition = args[0];
     auto body = args[1];
@@ -285,7 +276,8 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
     return EvaluationResult<InterpreterNodePtr>::bre();
   }
@@ -298,9 +290,10 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<InterpreterNodePtr> args = get_args(self, interpreter, 1);
+    expect_n_args(args, 1);
     auto return_value = get_or_ret(eval(interpreter, args[0]));
     return EvaluationResult<InterpreterNodePtr>::ret(return_value);
   }
@@ -314,9 +307,10 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const override {
-    std::vector<InterpreterNodePtr> args = get_args(self, interpreter, 2);
+    expect_n_args(args, 2);
 
     auto context_vars = force_downcast<List>(interpreter, args[0]);
     std::unordered_set<std::string> exceptions{};
@@ -347,25 +341,25 @@ private:
 
   std::optional<EvaluationResult<InterpreterNodePtr>> first_error;
 
-  std::vector<EvaluationResult<InterpreterNodePtr>> ordered;
-
   template<class M>
-  EvaluationResult<std::shared_ptr<M>> pop_type(InterpreterNodePtr node, Interpreter& interpreter) const {
+    EvaluationResult<std::shared_ptr<M>> pop_type(std::deque<InterpreterNodePtr>& args,
+        InterpreterNodePtr node,
+        Interpreter& interpreter) const {
     if (first_error.has_value()) {
       return nullptr;
     }
-    auto term = interpreter.get_stack().pop(interpreter, node);
-    auto evaluated = eval(interpreter, term);
+    auto term = args.front();
+    args.pop_front();
+    auto evaluated = eval_to_type<M>(interpreter, term);
 
     if (evaluated.get_type() != EvaluationResultType::OK) {
       const_cast<SimpleFunction*>(this)->first_error.emplace(std::move(evaluated));
       return nullptr;
     }
-    auto downcasted = force_downcast<M>(interpreter, evaluated.get_value());
-    return downcasted;
+    return evaluated;
   }
 
-  EvaluationResult<InterpreterNodePtr> execute(Interpreter& interpreter, EvaluationResult<std::shared_ptr<T>>&... args) const {
+  EvaluationResult<InterpreterNodePtr> execute(Interpreter& interpreter, const EvaluationResult<std::shared_ptr<T>>&... args) const {
     if (first_error.has_value()) {
       return first_error.value().to_throw();
     }
@@ -377,16 +371,19 @@ public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
       std::shared_ptr<InterpreterNode> self,
-      Interpreter& interpreter
+      Interpreter& interpreter,
+      std::deque<std::shared_ptr<InterpreterNode>> args
     ) const final {
 
-    std::tuple<EvaluationResult<std::shared_ptr<T>>...> args{pop_type<T>(self, interpreter)...};
+    expect_n_args(args, sizeof...(T));
 
-    auto invoker = [&]<typename... IT>(IT&&... args) { 
-      return execute(interpreter, std::forward<IT>(args)...);
+    std::tuple<EvaluationResult<std::shared_ptr<T>>...> argss{pop_type<T>(args, self, interpreter)...};
+
+    auto invoker = [&]<typename... IT>(const IT&... args) { 
+      return execute(interpreter, args...);
     };
 
-    return std::apply(invoker, args);
+    return std::apply(invoker, argss);
   }
 
   virtual EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<T>...) const = 0;
@@ -415,15 +412,17 @@ public:
       : Literal::Type::INTEGER;
 
 
+    std::shared_ptr<Literal> r;
     if (target_type == Literal::Type::INTEGER) {
-      return makeLiteralInt(std::nullopt, func(a->intValue, b->intValue));
+      r = makeLiteralInt(std::nullopt, func(a->intValue, b->intValue));
     } else if (a->type == Literal::Type::INTEGER) {
-      return makeLiteralReal(std::nullopt, func(a->intValue, b->realValue));
+      r = makeLiteralReal(std::nullopt, func(a->intValue, b->realValue));
     } else if (b->type == Literal::Type::INTEGER) {
-      return makeLiteralReal(std::nullopt, func(a->realValue, b->intValue));
+      r = makeLiteralReal(std::nullopt, func(a->realValue, b->intValue));
     } else {
-      return makeLiteralReal(std::nullopt, func(a->realValue, b->realValue));
+      r = makeLiteralReal(std::nullopt, func(a->realValue, b->realValue));
     }
+    return r;
   }
 };
 

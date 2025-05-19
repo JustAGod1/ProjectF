@@ -1,5 +1,6 @@
 #include "parser/parser.hpp"
 #include "parser/lexer.hpp"
+#include <deque>
 #include <fstream>
 #include <memory>
 #include <sstream>
@@ -33,7 +34,7 @@ int main(int argc, char** argv) {
 
   Interpreter interpreter{source};
 
-  auto result = p->evaluate(p, interpreter);
+  auto result = p->evaluate(p, interpreter, std::deque<InterpreterNodePtr>{});
 
   if (result.is_ok()) {
     result.get_value()->print(std::cout);

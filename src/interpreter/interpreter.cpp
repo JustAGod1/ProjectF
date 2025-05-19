@@ -30,15 +30,6 @@ std::shared_ptr<InterpreterNode> Context::get(std::string_view name) {
 }
 
 void Context::set(std::string_view name, std::shared_ptr<InterpreterNode> value) {
-  for (int i = 1; i < this->layers.size(); i++) {
-    auto& layer = this->layers.rbegin()[i];
-    auto v = layer.variables.find(name);
-    if (v != layer.variables.end()) {
-      v->second = value;
-      return;
-    }
-  }
-  
   this->layers[0].set(name, value);
 }
 

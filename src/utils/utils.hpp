@@ -1,6 +1,8 @@
 #pragma once
+#include <functional>
 #include <stdio.h>
 #include <type_traits>
+#include <utility>
 
 template <class T, template <class...> class Template>
 struct is_specialization : std::false_type {};
@@ -18,3 +20,17 @@ using is_specialization_v = is_specialization<Template<Args...>, Template>::valu
     printf((msg) __VA_OPT__(, )__VA_ARGS__);\
     exit(1);\
   }
+
+
+template<typename F>
+class defer {
+private:
+  F block;
+
+public:
+  defer(F&& block) : block(block)  {}
+  ~defer() {
+    block();
+  }
+
+};
