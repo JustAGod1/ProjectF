@@ -7,6 +7,8 @@
  * Unfortunately the implementation relies on this trick with redefining class name
  * with a preprocessor macro. See GNU Flex manual, "Generating C++ Scanners" section
  */
+#include <istream>
+#include <sstream>
 #if ! defined(yyFlexLexerOnce)
 #include <FlexLexer.h>
 #endif
@@ -18,13 +20,28 @@
 #define YY_DECL yy::parser::symbol_type Scanner::next_token ()
 
 #include "parser.hpp" // this is needed for symbol_type
+#include "parser/node_location.hpp" // this is needed for symbol_type
+
 
     
 class Scanner : public yyFlexLexer {
+private:
+  std::istringstream stream;
 public:
-  Scanner() {}
+  const std::string& s;
+  Scanner(std::string& s) : s(s), stream(s) {
+    switch_streams(stream, std::cout);
+  }
 	virtual ~Scanner() = default;
 	virtual yy::parser::symbol_type next_token();
+
+private:
+  NodeLocation loc;
+
+  int lexer_error(const char* msg) {
+      std::cerr << "Error(" << loc <<  "): " << msg << std::endl;
+      return 0;
+  }
 
 };
 

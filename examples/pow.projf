@@ -1,0 +1,21 @@
+(func pow (x power)
+  (prog ()
+    (
+      (prog () 
+        (
+          (setq result x)lol
+          (while (greater power 1)
+            (prog ()
+              (
+                (setq result (times result x))
+                (setq power (minus power 1))
+              )
+            )
+          )
+        )
+      )
+      (return result)
+    )
+  )
+)
+(pow 2 3)

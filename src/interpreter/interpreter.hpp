@@ -1,18 +1,26 @@
 #pragma once
 
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <sstream>
+#include <exception>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <unordered_map>
+#include <unordered_set>
 #include <deque>
-#include <concepts>
+#include <stdarg.h>
+#include <fmt/base.h>
+#include <fmt/format.h>
+#include <utility>
 
 #include "utils/utils.hpp"
 #include "interpreter/special_forms.hpp"
+#include "parser/node_location.hpp"
 
 class Interpreter;
 class InterpreterNode;
@@ -77,18 +85,18 @@ public:
   bool is_ok() { return type == EvaluationResultType::OK; }
 
   auto to_throw() const {
-    assert(type != EvaluationResultType::OK, "shouldn't be ok");
+    assert_unverbose(type != EvaluationResultType::OK, "shouldn't be ok");
     return EvaluationResultThrowed{return_value, type};
   }
   
   R& get_value() { 
-    assert(type == EvaluationResultType::OK, "should be ok");
+    assert_unverbose(type == EvaluationResultType::OK, "should be ok");
     return value;
   }
 
   R& get_return() { 
     bool kek;
-    assert(type == EvaluationResultType::RETURN, "should be return");
+    assert_unverbose(type == EvaluationResultType::RETURN, "should be return");
     return value;
   }
 
@@ -118,7 +126,10 @@ private:
   friend class Interpreter;
 
 public:
+  const std::optional<NodeLocation> location;
   virtual ~InterpreterNode() = default;
+
+  explicit InterpreterNode(std::optional<NodeLocation> location) : location(location) {}
 
   virtual EvaluationResult<std::shared_ptr<InterpreterNode>> evaluate(
       std::shared_ptr<InterpreterNode> self,
@@ -126,17 +137,27 @@ public:
     ) const = 0;
 
   virtual void print(std::ostream& out, int indent = 0) const = 0;
+
+  std::string to_string() const {
+    std::stringstream ss;
+    print(ss);
+    return ss.str();
+  }
 };
 
 using InterpreterNodePtr = std::shared_ptr<InterpreterNode>;
 
-class CallableNode : public InterpreterNode { };
+class CallableNode : public InterpreterNode {
+public:
+  CallableNode() : InterpreterNode(std::nullopt) {}
+};
 
 
 class Context {
 private:
   class ContextLayer {
   private:
+    friend Context;
 
     template<typename ... Bases>
     struct overload : Bases ...
@@ -159,7 +180,7 @@ private:
 
 private:
   std::deque<ContextLayer> layers;
-  void pop_layer();
+  void pop_layer(std::optional<std::unordered_set<std::string>>);
   ContextLayer& root_layer;
 public:
 
@@ -167,15 +188,23 @@ public:
   private:
     friend Context;
     Context& context;
+    std::optional<std::unordered_set<std::string>> exceptions;
     explicit ContextLayerToken(Context& context) : context(context) {}
+    explicit ContextLayerToken(Context& context, std::unordered_set<std::string> exceptions) 
+      : context(context)
+      , exceptions(std::move(exceptions))  {}
   public:
-    ~ContextLayerToken() { context.pop_layer(); }
+    ~ContextLayerToken() { context.pop_layer(std::move(exceptions)); }
   };
   friend ContextLayerToken;
 
   std::shared_ptr<InterpreterNode> get(std::string_view name);
   void set(std::string_view name, std::shared_ptr<InterpreterNode> value);
   ContextLayerToken create_layer();
+  ContextLayerToken create_layer(std::unordered_set<std::string> exceptions);
+  ContextLayerToken create_layer(std::initializer_list<std::string> exceptions) { 
+    return create_layer(std::unordered_set(exceptions));
+  }
 
   void set_in_root(std::string_view name, std::shared_ptr<InterpreterNode> value);
 
@@ -189,22 +218,74 @@ private:
 public:
 
   void push(std::shared_ptr<InterpreterNode> value);
-  std::shared_ptr<InterpreterNode> pop();
+  int available() { return content.size(); }
+  std::shared_ptr<InterpreterNode> pop(Interpreter& interpreter, InterpreterNodePtr node);
   std::optional<std::shared_ptr<InterpreterNode>> pop_or_null();
-  void assert_empty();
+  bool is_empty();
 
 };
+class EvaluatonException;
 
 class Interpreter {
 private:
   Context context;
   InterpreterStack stack;
+  const std::string_view source;
+
+  friend class EvaluatonException;
+
+  [[noreturn]]
+  void exit_fatal(std::string message, const InterpreterNode& node) const {
+      fmt::println("Condition failed: {}", message);
+      if (node.location.has_value()) {
+        node.location.value().print_line_error(source, std::cout);
+        std::cout << std::endl;
+      } else {
+        fmt::println("Given node {} has no location", node.to_string());
+      }
+
+      exit(1);
+  }
+
 public:
-  explicit Interpreter() {
+  explicit Interpreter(std::string_view source) : source(source) {
     register_special_forms(context);
+  }
+
+  template<typename LikeBool, typename... Args>
+  void assert_verbose(const InterpreterNodePtr& node, LikeBool condition, const char* fmt, Args&&... args) const {
+    assert_verbose(*node.get(), condition, fmt, args...);
+  }
+  template<typename LikeBool, typename... Args>
+  void assert_verbose(const InterpreterNode& node, LikeBool condition, const char* fmt, Args&&... args) const {
+    if (!condition) {
+      exit_fatal(fmt::format(fmt::runtime(fmt), args...), node);
+    }
   }
 
   Context& get_context() { return context; }
   InterpreterStack& get_stack() { return stack; }
+};
+
+class EvaluatonException : public std::exception {
+private:
+  std::string message;
+public:
+  EvaluatonException(std::string message) : message(message) {}
+
+  template<typename... Args>
+  EvaluatonException(const char* fmt, Args&&... args) : message(fmt::format(fmt::runtime(fmt), std::forward<Args>(args)...)) {}
+
+  [[noreturn]]
+  void exit_fatal(const Interpreter& interpreter, InterpreterNodePtr node) {
+    interpreter.exit_fatal(std::move(message), *node.get());
+  }
+
+  template<typename... Args>
+  static void throw_if_false(bool condition, const char* fmt, Args&&... args) {
+    if (!condition) {
+      throw EvaluatonException{fmt, std::forward<Args>(args)...};
+    }
+  }
 };
 

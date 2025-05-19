@@ -1,38 +1,51 @@
 BUILDDIR := objs
 
-SOURCES := $(shell find . -name '*.cpp')
-HEADERS := $(shell find . -name '*.hpp')
+SRC_DIR := src
 
-LEXER_CODE = ./parser/lexer.cpp
-LEXER_HEADER = parser/lexer.hpp
-LEXER_CONF = parser/lexer.l
+SOURCES := $(shell find $(SRC_DIR) -name '*.cpp')
+HEADERS := $(shell find $(SRC_DIR) -name '*.hpp')
 
-PARSER_CODE = ./parser/parser.cpp
-PARSER_HEADER = parser/parser.hpp
-PARSER_CONF = parser/parser.y
+LEXER_CODE = src/parser/lexer.cpp
+LEXER_HEADER = src/parser/lexer.hpp
+LEXER_CONF = src/parser/lexer.l
 
+PARSER_CODE = src/parser/parser.cpp
+PARSER_HEADER = src/parser/parser.hpp
+PARSER_CONF = src/parser/parser.y
+
+THIRD_PARTY_DIR := third_party
+
+FMT_LIB_PATH = $(THIRD_PARTY_DIR)/fmt
 
 SOURCES += $(filter-out $(SOURCES),$(LEXER_CODE))
 SOURCES += $(filter-out $(SOURCES),$(PARSER_CODE))
+
+HEADERS += $(filter-out $(HEADERS),$(PARSER_HEADER))
 
 OBJECTS := $(addprefix $(BUILDDIR)/,$(SOURCES:%.cpp=%.o))
 
 CXXFLAGS := -std=c++20
 CXXFLAGS += -g
+CXXFLAGS += -O0
 
-$(LEXER_CODE): $(LEXER_CONF) $(LEXER_HEADER) $(PARSER_HEADER)
-	flex -o $(LEXER_CODE) $(LEXER_CONF)
+CPPFLAGS := -I$(SRC_DIR)
+CPPFLAGS += -I$(FMT_LIB_PATH)/include
+CPPFLAGS += -DFMT_HEADER_ONLY
 
-$(PARSER_HEADER) $(PARSER_CODE): $(PARSER_CONF)
+#LDFLAGS := -L$(FMT_LIB_PATH)
+LDFLAGS += -lfmt
+
+$(LEXER_CODE) $(PARSER_HEADER) $(PARSER_CODE): $(LEXER_CONF) $(PARSER_CONF)
 	bison -o $(PARSER_CODE) $(PARSER_CONF)
+	flex -o $(LEXER_CODE) $(LEXER_CONF)
 
 gen_code: $(LEXER_CODE) $(PARSER_HEADER) $(PARSER_CODE)
 
 .PHONY: gen_code
 
-$(BUILDDIR)/%.o: %.cpp $(HEADERS) gen_code
+$(BUILDDIR)/%.o: %.cpp $(HEADERS)
 	mkdir -p $(shell dirname -- $@)
-	$(CXX) $(CXXFLAGS) $(CPPFLAGS) $(LDFLAGS) -I. -c $< -o $@
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 
 clear:
@@ -40,7 +53,7 @@ clear:
 	rm -rf $(LEXER_CODE) $(PARSER_CODE) $(PARSER_HEADER)
 
 projf: $(OBJECTS)
-	g++ -o $@ $(OBJECTS)
+	g++ $(LDFLAGS) -o $@ $(OBJECTS)
 
 
 
