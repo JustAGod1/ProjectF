@@ -6,8 +6,6 @@ compile_commands.json
 src/parser/parser.hpp
 src/parser/parser.cpp
 src/parser/lexer.cpp
-src/parser/location.hh
-src/parser/position.hh
 
 projf
 
