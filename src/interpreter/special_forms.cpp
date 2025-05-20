@@ -18,7 +18,7 @@
 #include "utils/utils.hpp"
 
 static std::deque<InterpreterNodePtr>& expect_n_args(std::deque<InterpreterNodePtr>& args, int n) {
-  EvaluatonException::throw_if_false(args.size() >= n,
+  EvaluatonException::throw_if_false(args.size() == n,
       "Expected {} arguments but got {}",
       n,
       args.size()
@@ -39,22 +39,22 @@ public:
   std::string description() const override { return "quote"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     return expect_n_args(args, 1)[0];
   }
 };
 
-static EvaluationResult<std::shared_ptr<InterpreterNode>> eval(Interpreter& interpreter, std::shared_ptr<InterpreterNode> node) {
+static EvaluationResult<NotNullSharedPtr<InterpreterNode>> eval(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> node) {
   return node->evaluate(node, interpreter, std::deque<InterpreterNodePtr>{});
 }
 
 template <class Derive>
-static EvaluationResult<std::shared_ptr<Derive>> eval_to_type(Interpreter& interpreter, std::shared_ptr<InterpreterNode> node) {
+static EvaluationResult<NotNullSharedPtr<Derive>> eval_to_type(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> node) {
   auto raw = get_or_ret(eval(interpreter, node));
-  auto downcasted = std::dynamic_pointer_cast<Derive>(raw);
+  auto downcasted = (raw).dyn_cast<Derive>();
   if (!downcasted) {
     interpreter.assert_verbose(node.get(),
         downcasted,
@@ -62,10 +62,10 @@ static EvaluationResult<std::shared_ptr<Derive>> eval_to_type(Interpreter& inter
         typeid(Derive).name(),
         typeid(raw.get()).name());
   }
-  return downcasted;
+  return *downcasted;
 }
 
-static EvaluationResult<bool> eval_to_bool(Interpreter& interpreter, std::shared_ptr<InterpreterNode> node) {
+static EvaluationResult<bool> eval_to_bool(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> node) {
   auto literal = get_or_ret(eval_to_type<Literal>(interpreter, node));
   if (literal->type != Literal::Type::BOOLEAN) {
     std::ostringstream sstream{};
@@ -81,10 +81,10 @@ static EvaluationResult<bool> eval_to_bool(Interpreter& interpreter, std::shared
 }
 
 template <class Derive>
-std::shared_ptr<Derive> force_downcast(const Interpreter& interpreter, InterpreterNodePtr base) {
-  auto downcasted = std::dynamic_pointer_cast<Derive>(base);
-  interpreter.assert_verbose(base.get(), downcasted, "Failed to cast {} to {}", base ? typeid(*base).name() : "nullptr", typeid(Derive).name());
-  return downcasted;
+NotNullSharedPtr<Derive> force_downcast(const Interpreter& interpreter, InterpreterNodePtr base) {
+  auto downcasted = base.dyn_cast<Derive>();
+  interpreter.assert_verbose(base, downcasted, "Failed to cast {} to {}", typeid(base.get()).name(), typeid(Derive).name());
+  return *downcasted;
 }
 
 class SetqSpecialNode : public SpecialFormNode {
@@ -92,9 +92,9 @@ public:
   std::string description() const override { return "setq"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     expect_n_args(args, 2);
 
@@ -117,9 +117,9 @@ public:
 
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     std::vector<InterpreterNodePtr> evaluated;
     expect_n_args(args, arg_names.size());
@@ -157,9 +157,9 @@ public:
   std::string description() const override { return "lambda"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     expect_n_args(args, 2);
 
@@ -167,13 +167,13 @@ public:
 
     std::vector<std::string> names;
     std::ranges::transform(maybe_list->elements, std::back_inserter(names), [&](auto &v) {
-        std::shared_ptr<Atom> vd = force_downcast<Atom>(interpreter, v);
+        NotNullSharedPtr<Atom> vd = force_downcast<Atom>(interpreter, v);
         return vd->identifier->name;
       });
 
     auto body = args[1];
     
-    return std::make_shared<LambdaValueNode>(names, body);
+    return make_nn_shared<LambdaValueNode>(names, body);
   }
 };
 
@@ -182,9 +182,9 @@ public:
   std::string description() const override { return "func"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     expect_n_args(args, 3);
 
@@ -194,13 +194,13 @@ public:
 
     std::vector<std::string> names;
     std::ranges::transform(maybe_list->elements, std::back_inserter(names), [&](auto &v) {
-        std::shared_ptr<Atom> vd = force_downcast<Atom>(interpreter, v);
+        NotNullSharedPtr<Atom> vd = force_downcast<Atom>(interpreter, v);
         return vd->identifier->name;
       });
     
     auto body = args[2];
 
-    auto v = std::make_shared<LambdaValueNode>(names, body);
+    auto v = make_nn_shared<LambdaValueNode>(names, body);
 
     interpreter.get_context().set(maybe_atom->identifier->name, v);
 
@@ -213,9 +213,9 @@ public:
   std::string description() const override { return "cond"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     EvaluatonException::throw_if_false(args.size() >= 2,
         "cond expects at least 2 args got {}",
@@ -247,9 +247,9 @@ public:
   std::string description() const override { return "while"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     expect_n_args(args, 2);
 
@@ -275,9 +275,9 @@ public:
   std::string description() const override { return "break"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     return EvaluationResult<InterpreterNodePtr>::bre();
   }
@@ -289,9 +289,9 @@ public:
   std::string description() const override { return "return"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     expect_n_args(args, 1);
     auto return_value = get_or_ret(eval(interpreter, args[0]));
@@ -306,9 +306,9 @@ public:
   std::string description() const override { return "prog"; }
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const override {
     expect_n_args(args, 2);
 
@@ -321,9 +321,10 @@ public:
     }
     auto token = interpreter.get_context().create_layer(exceptions);
 
-    auto body = std::dynamic_pointer_cast<List>(args[1]);
+    auto body_opt = args[1].dyn_cast<List>();
 
-    interpreter.assert_verbose(args[1], body, "Second argument of prog must be List");
+    interpreter.assert_verbose(args[1], body_opt, "Second argument of prog must be List");
+    auto body = *body_opt;
 
     InterpreterNodePtr last_result = null_node();
     for (auto v : body->elements) {
@@ -342,42 +343,42 @@ private:
   std::optional<EvaluationResult<InterpreterNodePtr>> first_error;
 
   template<class M>
-    EvaluationResult<std::shared_ptr<M>> pop_type(std::deque<InterpreterNodePtr>& args,
+    std::optional<EvaluationResult<NotNullSharedPtr<M>>> pop_type(std::deque<InterpreterNodePtr>& args,
         InterpreterNodePtr node,
         Interpreter& interpreter) const {
     if (first_error.has_value()) {
-      return nullptr;
+      return std::nullopt;
     }
     auto term = args.front();
     args.pop_front();
-    auto evaluated = eval_to_type<M>(interpreter, term);
+    EvaluationResult<NotNullSharedPtr<M>> evaluated = eval_to_type<M>(interpreter, term);
 
     if (evaluated.get_type() != EvaluationResultType::OK) {
       const_cast<SimpleFunction*>(this)->first_error.emplace(std::move(evaluated));
-      return nullptr;
+      return std::nullopt;
     }
     return evaluated;
   }
 
-  EvaluationResult<InterpreterNodePtr> execute(Interpreter& interpreter, const EvaluationResult<std::shared_ptr<T>>&... args) const {
+  EvaluationResult<InterpreterNodePtr> execute(Interpreter& interpreter, const std::optional<EvaluationResult<NotNullSharedPtr<T>>>&... args) const {
     if (first_error.has_value()) {
       return first_error.value().to_throw();
     }
 
-    return run(interpreter, args.get_value()...);
+    return run(interpreter, (*args).get_value()...);
   }
 
 public:
 
   EvaluationResult<InterpreterNodePtr> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const final {
 
     expect_n_args(args, sizeof...(T));
 
-    std::tuple<EvaluationResult<std::shared_ptr<T>>...> argss{pop_type<T>(args, self, interpreter)...};
+    std::tuple<std::optional<EvaluationResult<NotNullSharedPtr<T>>>...> argss{pop_type<T>(args, self, interpreter)...};
 
     auto invoker = [&]<typename... IT>(const IT&... args) { 
       return execute(interpreter, args...);
@@ -386,7 +387,7 @@ public:
     return std::apply(invoker, argss);
   }
 
-  virtual EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<T>...) const = 0;
+  virtual EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<T>...) const = 0;
 };
 
 template<typename F>
@@ -401,7 +402,7 @@ public:
 
   std::string description() const override { return name; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<Literal> a, std::shared_ptr<Literal> b) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<Literal> a, NotNullSharedPtr<Literal> b) const override {
     interpreter.assert_verbose(a, a->type != Literal::Type::BOOLEAN, "first operand must be digital");
     interpreter.assert_verbose(a, a->type != Literal::Type::NULLVAL, "first operand must be digital");
     interpreter.assert_verbose(b, b->type != Literal::Type::BOOLEAN, "second operand must be digital");
@@ -412,7 +413,7 @@ public:
       : Literal::Type::INTEGER;
 
 
-    std::shared_ptr<Literal> r;
+    NotNullSharedPtr<Literal> r;
     if (target_type == Literal::Type::INTEGER) {
       r = makeLiteralInt(std::nullopt, func(a->intValue, b->intValue));
     } else if (a->type == Literal::Type::INTEGER) {
@@ -427,26 +428,26 @@ public:
 };
 
 template<template <typename> typename T>
-auto make_form(std::string name, auto&& f) -> std::shared_ptr<T<std::remove_cvref_t<decltype(f)>>> {
-  return std::make_shared<T<std::remove_cvref_t<decltype(f)>>>(std::move(name), f);
+auto make_form(std::string name, auto&& f) -> NotNullSharedPtr<T<std::remove_cvref_t<decltype(f)>>> {
+  return make_nn_shared<T<std::remove_cvref_t<decltype(f)>>>(std::move(name), f);
 }
 
 template<typename F>
-std::shared_ptr<BinaryMathFunction<F>> make_bin_math_func(std::string name, F&& f) {
-  return std::shared_ptr<BinaryMathFunction<F>>{new BinaryMathFunction{std::move(name), std::forward<F>(f)}};
+NotNullSharedPtr<BinaryMathFunction<F>> make_bin_math_func(std::string name, F&& f) {
+  return NotNullSharedPtr<BinaryMathFunction<F>>{new BinaryMathFunction{std::move(name), std::forward<F>(f)}};
 }
 
 
-std::shared_ptr<SpecialFormNode> plus_node = make_bin_math_func("plus", [](auto a, auto b){ return a + b; });
-std::shared_ptr<SpecialFormNode> minus_node = make_bin_math_func("minus", [](auto a, auto b){ return a - b; });
-std::shared_ptr<SpecialFormNode> times_node = make_bin_math_func("times", [](auto a, auto b){ return a * b; });
-std::shared_ptr<SpecialFormNode> divide_node = make_bin_math_func("divide", [](auto a, auto b){ return a / b; });
+NotNullSharedPtr<SpecialFormNode> plus_node = make_bin_math_func("plus", [](auto a, auto b){ return a + b; });
+NotNullSharedPtr<SpecialFormNode> minus_node = make_bin_math_func("minus", [](auto a, auto b){ return a - b; });
+NotNullSharedPtr<SpecialFormNode> times_node = make_bin_math_func("times", [](auto a, auto b){ return a * b; });
+NotNullSharedPtr<SpecialFormNode> divide_node = make_bin_math_func("divide", [](auto a, auto b){ return a / b; });
 
 class ModFunction : public SimpleFunction<Literal, Literal> {
 public:
   std::string description() const override { return "mod"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<Literal> a, std::shared_ptr<Literal> b) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<Literal> a, NotNullSharedPtr<Literal> b) const override {
     interpreter.assert_verbose(a, a->type == Literal::Type::INTEGER, "first operand must be int");
     interpreter.assert_verbose(b, b->type == Literal::Type::INTEGER, "second operand must be int");
 
@@ -458,7 +459,7 @@ class HeadFunction : public SimpleFunction<List> {
 public:
   std::string description() const override { return "head"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<List> arg) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<List> arg) const override {
     EvaluatonException::throw_if_false(arg->elements.size() > 0, "list must not be empty");
     return arg->elements[0];
   }
@@ -468,7 +469,7 @@ class LengthFunction : public SimpleFunction<List> {
 public:
   std::string description() const override { return "length"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<List> arg) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<List> arg) const override {
     return makeLiteralInt(std::nullopt, arg->elements.size());
   }
 };
@@ -477,11 +478,11 @@ class TailFunction : public SimpleFunction<List> {
 public:
   std::string description() const override { return "tail"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<List> arg) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<List> arg) const override {
     interpreter.assert_verbose(arg, arg->elements.size() > 0, "list must not be empty");
-    std::vector<InterpreterNodePtr> tail{};
+    std::vector<InterpreterNodeNNPtr> tail{};
     std::ranges::copy(arg->elements.begin() + 1, arg->elements.end(), std::back_inserter(tail));
-    return std::make_shared<List>(std::nullopt, std::move(tail));
+    return make_nn_shared<List>(std::nullopt, std::move(tail));
   }
 };
 
@@ -489,12 +490,11 @@ class ConsFunction : public SimpleFunction<InterpreterNode, List> {
 public:
   std::string description() const override { return "cons"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, InterpreterNodePtr val, std::shared_ptr<List> arg) const override {
-    interpreter.assert_verbose(arg, arg->elements.size() > 0, "list must not be empty");
-    std::vector<InterpreterNodePtr> result{};
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, InterpreterNodePtr val, NotNullSharedPtr<List> arg) const override {
+    std::vector<InterpreterNodeNNPtr> result{};
     result.push_back(val);
     std::ranges::copy(arg->elements.begin(), arg->elements.end(), std::back_inserter(result));
-    return std::make_shared<List>(std::nullopt, result);
+    return make_nn_shared<List>(std::nullopt, result);
   }
 };
 
@@ -509,18 +509,18 @@ public:
 
   std::string description() const override { return name; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<Literal> a, std::shared_ptr<Literal> b) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<Literal> a, NotNullSharedPtr<Literal> b) const override {
     bool value = func(interpreter, *a.get(), *b.get());
     return makeLiteralBool(std::nullopt, value);
   }
 };
 
-std::shared_ptr<SpecialFormNode> equal = make_form<LiteralBiFunction>("equal", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.eq(interpreter, b); });
-std::shared_ptr<SpecialFormNode> nonequal = make_form<LiteralBiFunction>("nonequal", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.neq(interpreter, b); });
-std::shared_ptr<SpecialFormNode> less = make_form<LiteralBiFunction>("less", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.less(interpreter, b); });
-std::shared_ptr<SpecialFormNode> lesseq = make_form<LiteralBiFunction>("lesseq", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.lesseq(interpreter, b); });
-std::shared_ptr<SpecialFormNode> greater = make_form<LiteralBiFunction>("greater", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.greater(interpreter, b); });
-std::shared_ptr<SpecialFormNode> greatereq = make_form<LiteralBiFunction>("greatereq", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.greatereq(interpreter, b); });
+NotNullSharedPtr<SpecialFormNode> equal = make_form<LiteralBiFunction>("equal", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.eq(interpreter, b); });
+NotNullSharedPtr<SpecialFormNode> nonequal = make_form<LiteralBiFunction>("nonequal", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.neq(interpreter, b); });
+NotNullSharedPtr<SpecialFormNode> less = make_form<LiteralBiFunction>("less", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.less(interpreter, b); });
+NotNullSharedPtr<SpecialFormNode> lesseq = make_form<LiteralBiFunction>("lesseq", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.lesseq(interpreter, b); });
+NotNullSharedPtr<SpecialFormNode> greater = make_form<LiteralBiFunction>("greater", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.greater(interpreter, b); });
+NotNullSharedPtr<SpecialFormNode> greatereq = make_form<LiteralBiFunction>("greatereq", [](const Interpreter& interpreter, const Literal& a, const Literal& b) { return a.greatereq(interpreter, b); });
 
 template<typename F>
 class ElementPredicate : public SimpleFunction<InterpreterNode> 
@@ -533,7 +533,7 @@ public:
 
   std::string description() const override { return name; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<InterpreterNode> elem) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> elem) const override {
     bool value = func(*elem.get());
     return makeLiteralBool(std::nullopt, value);
   }
@@ -550,12 +550,12 @@ std::function<bool(const InterpreterNode&)> make_literal_predicate(F&& f) {
   };
 }
 
-std::shared_ptr<SpecialFormNode> isint = make_form<ElementPredicate>("isint", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::INTEGER; }));
-std::shared_ptr<SpecialFormNode> isreal = make_form<ElementPredicate>("isreal", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::REAL; }));
-std::shared_ptr<SpecialFormNode> isbool = make_form<ElementPredicate>("isbool", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::BOOLEAN; }));
-std::shared_ptr<SpecialFormNode> isnull = make_form<ElementPredicate>("isnull", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::NULLVAL; }));
-std::shared_ptr<SpecialFormNode> isatom = make_form<ElementPredicate>("isatom", [](const InterpreterNode& elem){ return dynamic_cast<const Atom*>(&elem) != nullptr; });
-std::shared_ptr<SpecialFormNode> islist = make_form<ElementPredicate>("islist", [](const InterpreterNode& elem){ return dynamic_cast<const List*>(&elem) != nullptr; });
+NotNullSharedPtr<SpecialFormNode> isint = make_form<ElementPredicate>("isint", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::INTEGER; }));
+NotNullSharedPtr<SpecialFormNode> isreal = make_form<ElementPredicate>("isreal", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::REAL; }));
+NotNullSharedPtr<SpecialFormNode> isbool = make_form<ElementPredicate>("isbool", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::BOOLEAN; }));
+NotNullSharedPtr<SpecialFormNode> isnull = make_form<ElementPredicate>("isnull", make_literal_predicate([](const Literal& literal){ return literal.type == Literal::Type::NULLVAL; }));
+NotNullSharedPtr<SpecialFormNode> isatom = make_form<ElementPredicate>("isatom", [](const InterpreterNode& elem){ return dynamic_cast<const Atom*>(&elem) != nullptr; });
+NotNullSharedPtr<SpecialFormNode> islist = make_form<ElementPredicate>("islist", [](const InterpreterNode& elem){ return dynamic_cast<const List*>(&elem) != nullptr; });
 
 template<typename F>
 class BoolBiFunction : public SimpleFunction<Literal, Literal> 
@@ -568,7 +568,7 @@ public:
 
   std::string description() const override { return name; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<Literal> a, std::shared_ptr<Literal> b) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<Literal> a, NotNullSharedPtr<Literal> b) const override {
     interpreter.assert_verbose(a, a->type == Literal::Type::BOOLEAN, "first operand of {} must be bool", name.c_str());
     interpreter.assert_verbose(b, b->type == Literal::Type::BOOLEAN, "second operand of {} must be bool", name.c_str());
 
@@ -577,16 +577,16 @@ public:
   }
 };
 
-std::shared_ptr<SpecialFormNode> and_func = make_form<BoolBiFunction>("and", [](bool a, bool b){ return a && b; });
-std::shared_ptr<SpecialFormNode> or_func = make_form<BoolBiFunction>("or", [](bool a, bool b){ return a || b; });
-std::shared_ptr<SpecialFormNode> xor_func = make_form<BoolBiFunction>("or", [](bool a, bool b){ return a != b; });
+NotNullSharedPtr<SpecialFormNode> and_func = make_form<BoolBiFunction>("and", [](bool a, bool b){ return a && b; });
+NotNullSharedPtr<SpecialFormNode> or_func = make_form<BoolBiFunction>("or", [](bool a, bool b){ return a || b; });
+NotNullSharedPtr<SpecialFormNode> xor_func = make_form<BoolBiFunction>("or", [](bool a, bool b){ return a != b; });
 
 
 class BoolNotFunction : public SimpleFunction<Literal> {
 public:
   std::string description() const override { return "not"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<Literal> a) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<Literal> a) const override {
     interpreter.assert_verbose(a, a->type == Literal::Type::BOOLEAN, "operand of {} must be bool", description().c_str());
 
     bool value = !a->boolValue;
@@ -598,7 +598,7 @@ class EvalFunction : public SimpleFunction<InterpreterNode> {
 public:
   std::string description() const override { return "eval"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<InterpreterNode> a) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> a) const override {
     return a;
   }
 };
@@ -607,7 +607,7 @@ class PrintFunction : public SimpleFunction<InterpreterNode> {
 public:
   std::string description() const override { return "print"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, std::shared_ptr<InterpreterNode> a) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> a) const override {
     a->print(std::cout);
     std::cout << std::endl;
     return null_node();
@@ -616,27 +616,27 @@ public:
 
 
 void register_special_forms(Context& context) {
-  std::vector<std::shared_ptr<SpecialFormNode>> f{};
-  f.emplace_back(std::make_shared<QuoteSpecialNode>());
-  f.emplace_back(std::make_shared<SetqSpecialNode>());
-  f.emplace_back(std::make_shared<LambdaSpecialNode>());
-  f.emplace_back(std::make_shared<FuncSpecialNode>());
-  f.emplace_back(std::make_shared<CondSpecialNode>());
-  f.emplace_back(std::make_shared<WhileSpecialNode>());
-  f.emplace_back(std::make_shared<BreakSpecialNode>());
-  f.emplace_back(std::make_shared<ReturnSpecialNode>());
-  f.emplace_back(std::make_shared<ProgSpecialNode>());
+  std::vector<NotNullSharedPtr<SpecialFormNode>> f{};
+  f.emplace_back(make_nn_shared<QuoteSpecialNode>());
+  f.emplace_back(make_nn_shared<SetqSpecialNode>());
+  f.emplace_back(make_nn_shared<LambdaSpecialNode>());
+  f.emplace_back(make_nn_shared<FuncSpecialNode>());
+  f.emplace_back(make_nn_shared<CondSpecialNode>());
+  f.emplace_back(make_nn_shared<WhileSpecialNode>());
+  f.emplace_back(make_nn_shared<BreakSpecialNode>());
+  f.emplace_back(make_nn_shared<ReturnSpecialNode>());
+  f.emplace_back(make_nn_shared<ProgSpecialNode>());
 
   f.emplace_back(plus_node);
   f.emplace_back(minus_node);
   f.emplace_back(times_node);
   f.emplace_back(divide_node);
-  f.emplace_back(std::make_shared<ModFunction>());
+  f.emplace_back(make_nn_shared<ModFunction>());
 
-  f.emplace_back(std::make_shared<HeadFunction>());
-  f.emplace_back(std::make_shared<TailFunction>());
-  f.emplace_back(std::make_shared<ConsFunction>());
-  f.emplace_back(std::make_shared<LengthFunction>());
+  f.emplace_back(make_nn_shared<HeadFunction>());
+  f.emplace_back(make_nn_shared<TailFunction>());
+  f.emplace_back(make_nn_shared<ConsFunction>());
+  f.emplace_back(make_nn_shared<LengthFunction>());
 
   f.emplace_back(equal);
   f.emplace_back(nonequal);
@@ -655,11 +655,11 @@ void register_special_forms(Context& context) {
   f.emplace_back(and_func);
   f.emplace_back(or_func);
   f.emplace_back(xor_func);
-  f.emplace_back(std::make_shared<BoolNotFunction>());
+  f.emplace_back(make_nn_shared<BoolNotFunction>());
 
-  f.emplace_back(std::make_shared<EvalFunction>());
+  f.emplace_back(make_nn_shared<EvalFunction>());
 
-  f.emplace_back(std::make_shared<PrintFunction>());
+  f.emplace_back(make_nn_shared<PrintFunction>());
 
   for (auto node : f) {
     context.set_in_root(node->description(), node);

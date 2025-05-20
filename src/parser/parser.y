@@ -18,13 +18,13 @@
     #include "parser_structs.hpp"
     
     
-    using ASTNodePtr = std::shared_ptr<ASTNode>;
-    using ElementPtr = std::shared_ptr<Element>;
-    using ListPtr = std::shared_ptr<List>;
-    using AtomPtr = std::shared_ptr<Atom>;
-    using LiteralPtr = std::shared_ptr<Literal>;
-    using IdentifierPtr = std::shared_ptr<Identifier>;
-    using QuotePtr = std::shared_ptr<Quote>;
+    using ASTNodePtr = NotNullSharedPtr<ASTNode>;
+    using ElementPtr = NotNullSharedPtr<Element>;
+    using ListPtr = NotNullSharedPtr<List>;
+    using AtomPtr = NotNullSharedPtr<Atom>;
+    using LiteralPtr = NotNullSharedPtr<Literal>;
+    using IdentifierPtr = NotNullSharedPtr<Identifier>;
+    using QuotePtr = NotNullSharedPtr<Quote>;
 
   class Scanner;
 }
@@ -61,7 +61,7 @@ namespace yy
 
 
 %param { Scanner &scanner }
-%parse-param { std::shared_ptr<Program> program }
+%parse-param { NotNullSharedPtr<Program> program }
 
 %locations
 
@@ -70,17 +70,17 @@ namespace yy
 %token LPAREN "(" RPAREN ")"
 %token QUOTE "'"
 %token TRUE "true" FALSE "false"
-%token <std::shared_ptr<Identifier>> IDENTIFIER
+%token <NotNullSharedPtr<Identifier>> IDENTIFIER
 %token <int> INTEGER
 %token <double> REAL
 
-%type <std::shared_ptr<Program>> Program
-%type <ElementPtr> Element
+%type <NotNullSharedPtr<Program>> Program
+%type <std::optional<ElementPtr>> Element
 %type <ListPtr> List
-%type <std::shared_ptr<Atom>> Atom
+%type <NotNullSharedPtr<Atom>> Atom
 %type <QuotePtr> Quote
-%type <std::shared_ptr<Literal>> Literal
-%type <std::vector<InterpreterNodePtr>> ListInner
+%type <NotNullSharedPtr<Literal>> Literal
+%type <std::vector<InterpreterNodeNNPtr>> ListInner
 
 %start Program
 
@@ -88,38 +88,38 @@ namespace yy
 
 Program
     : Element {
-        program->elements.push_back($1);
+        program->elements.push_back(*$1);
         $$ = program;
     }
     | Program Element {
-        $1->elements.push_back($2);
+        $1->elements.push_back(*$2);
         $$ = $1;
     }
     ;
 
 ListInner 
     : ListInner Element {
-      $1.push_back($2);
+      $1.push_back(*$2);
       $$ = std::move($1);
     }
     | Element {
-      $$ = std::vector<InterpreterNodePtr>{$1};
+      $$ = std::vector<InterpreterNodePtr>{*$1};
     }
     ;
 
 List
     : "(" ")" {
-        auto list = std::make_shared<List>(@$, std::vector<InterpreterNodePtr>{});
+        auto list = make_nn_shared<List>(@$, std::vector<InterpreterNodeNNPtr>{});
         $$ = list;
     }
     | "(" ListInner ")" {
-        $$ = std::make_shared<List>(@$, $2);
+        $$ = make_nn_shared<List>(@$, $2);
     }
     ;
 
 Quote 
     : "'" Element {
-      $$ = std::make_shared<Quote>(@$, $2);
+      $$ = make_nn_shared<Quote>(@$, *$2);
     }
 
 Element
@@ -131,7 +131,7 @@ Element
 
 Atom
     : IDENTIFIER {
-        $$ = std::make_shared<Atom>(@$, std::move($1));
+        $$ = make_nn_shared<Atom>(@$, std::move($1));
     }
     ;
 
@@ -145,7 +145,7 @@ Literal
 
 %%
 
-//std::shared_ptr<ListInner> g_program;
+//NotNullSharedPtr<ListInner> g_program;
 
 // Bison expects us to provide implementation - otherwise linker complains
 void yy::parser::error(const location_type& loc, const std::string &message) {

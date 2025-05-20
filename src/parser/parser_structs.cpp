@@ -8,20 +8,20 @@
 #include <type_traits>
 #include "utils/utils.hpp"
 
-std::shared_ptr<InterpreterNode> null_node() {
+NotNullSharedPtr<InterpreterNode> null_node() {
   return makeLiteralNil(std::nullopt);
 }
 
-EvaluationResult<InterpreterNodePtr> Identifier::evaluate(std::shared_ptr<InterpreterNode> self,
+EvaluationResult<InterpreterNodePtr> Identifier::evaluate(NotNullSharedPtr<InterpreterNode> self,
     Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args) const {
+      std::deque<NotNullSharedPtr<InterpreterNode>> args) const {
   return self;
 }
 
 template <class T>
 requires std::is_base_of_v<InterpreterNode, T>
-static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& interpreter, std::span<const std::shared_ptr<T>> nodes) {
-  std::vector<std::shared_ptr<InterpreterNode>> mapped;
+static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& interpreter, std::span<const NotNullSharedPtr<T>> nodes) {
+  std::vector<NotNullSharedPtr<InterpreterNode>> mapped;
   for (auto v : nodes) {
     mapped.emplace_back(get_or_ret(v->evaluate(v, interpreter, std::deque<InterpreterNodePtr>{})));
   }
@@ -31,14 +31,14 @@ static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& inter
 
 template <class T>
 requires std::is_base_of_v<InterpreterNode, T>
-static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& interpreter, const std::vector<std::shared_ptr<T>>& nodes) {
+static EvaluationResult<std::vector<InterpreterNodePtr>> eval(Interpreter& interpreter, const std::vector<NotNullSharedPtr<T>>& nodes) {
   return eval<T>(interpreter, std::span{nodes});
 }
 
-EvaluationResult<InterpreterNodePtr> Program::evaluate(std::shared_ptr<InterpreterNode> self,
+EvaluationResult<InterpreterNodePtr> Program::evaluate(NotNullSharedPtr<InterpreterNode> self,
     Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args) const {
-  std::vector<std::shared_ptr<InterpreterNode>> mapped = get_or_ret(eval<Element>(interpreter, this->elements));
+      std::deque<NotNullSharedPtr<InterpreterNode>> args) const {
+  std::vector<NotNullSharedPtr<InterpreterNode>> mapped = get_or_ret(eval<Element>(interpreter, this->elements));
   
   if (mapped.size() > 0) {
     return mapped.back();
@@ -46,20 +46,20 @@ EvaluationResult<InterpreterNodePtr> Program::evaluate(std::shared_ptr<Interpret
   return null_node();
 }
 
-EvaluationResult<InterpreterNodePtr> List::evaluate(std::shared_ptr<InterpreterNode> self,
+EvaluationResult<InterpreterNodePtr> List::evaluate(NotNullSharedPtr<InterpreterNode> self,
     Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args) const {
+      std::deque<NotNullSharedPtr<InterpreterNode>> args) const {
   auto& elements = this->elements;
 
-  Atom* f_name;
+  const Atom* f_name;
   if (elements.size() > 0) {
-    f_name = dynamic_cast<Atom*>(elements[0].get());
+    f_name = dynamic_cast<const Atom*>(elements[0].get());
     interpreter.assert_verbose(elements[0], f_name != nullptr, "first element of called list must be Atom");
     std::string_view name = f_name->identifier->name;
 
     auto node = interpreter.get_context().get(name);
     interpreter.assert_verbose(f_name, node, "there is no function with name {}", name);
-    interpreter.assert_verbose(f_name, dynamic_cast<CallableNode*>(node.get()) != nullptr, "attempt to call not-callable");
+    interpreter.assert_verbose(f_name, dynamic_cast<CallableNode*>(node.value().get()) != nullptr, "attempt to call not-callable");
 
     std::deque<InterpreterNodePtr> args_to_pass;
     for (auto cur = elements.begin() + 1; cur != elements.end(); cur++) {
@@ -67,7 +67,7 @@ EvaluationResult<InterpreterNodePtr> List::evaluate(std::shared_ptr<InterpreterN
     }
       
     try {
-      return node->evaluate(node, interpreter, args_to_pass);
+      return node.value()->evaluate(*node, interpreter, args_to_pass);
     } catch (EvaluatonException& e) {
       e.exit_fatal(interpreter, self);
     } 
@@ -77,27 +77,27 @@ EvaluationResult<InterpreterNodePtr> List::evaluate(std::shared_ptr<InterpreterN
 }
 
 EvaluationResult<InterpreterNodePtr> Quote::evaluate(
-  std::shared_ptr<InterpreterNode> self,
+  NotNullSharedPtr<InterpreterNode> self,
   Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
 ) const {
-  return this->inner;
+  return this->get_inner();
 }
 
 EvaluationResult<InterpreterNodePtr> Atom::evaluate(
-  std::shared_ptr<InterpreterNode> self,
+  NotNullSharedPtr<InterpreterNode> self,
   Interpreter& interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
 ) const {
-  std::shared_ptr<InterpreterNode> value = interpreter.get_context().get(this->identifier->name);
+  std::optional<NotNullSharedPtr<InterpreterNode>> value = interpreter.get_context().get(this->identifier->name);
   interpreter.assert_verbose(self, value, "there is no variable with name {}", this->identifier->name.c_str());
-  return value;
+  return *value;
 }
 
 EvaluationResult<InterpreterNodePtr> Literal::evaluate(
-  std::shared_ptr<InterpreterNode> self,
+  NotNullSharedPtr<InterpreterNode> self,
   Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
 ) const {
   return self;
 }

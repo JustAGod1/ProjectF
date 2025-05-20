@@ -1,4 +1,5 @@
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <memory>
@@ -14,7 +15,7 @@ class Atom;
 class Literal;
 class Identifier;
 
-using ASTNodePtr = std::shared_ptr<ASTNode>;
+using ASTNodePtr = NotNullSharedPtr<ASTNode>;
 
 
 // Base AST Node class
@@ -22,6 +23,7 @@ class ASTNode : public InterpreterNode {
 public:
 
   ASTNode(std::optional<NodeLocation> location) : InterpreterNode(location) {}
+  using InterpreterNode::InterpreterNode;
 
   virtual ~ASTNode() = default;
 };
@@ -30,6 +32,8 @@ public:
 class Element : public ASTNode {
 public:
   Element(std::optional<NodeLocation> location) : ASTNode(location) {}
+  using ASTNode::ASTNode;
+
   virtual ~Element() = default;
 };
 
@@ -37,6 +41,7 @@ public:
 class Identifier : public ASTNode {
 public:
     std::string name;
+    using ASTNode::ASTNode;
 
     Identifier(std::optional<NodeLocation> location, std::string name) : ASTNode(location), name(std::move(name)) {}
 
@@ -46,7 +51,7 @@ public:
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
         Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
       ) const override;
 };
 
@@ -55,10 +60,12 @@ public:
 // Program: collection of Elements
 class Program : public ASTNode {
 public:
-    std::vector<std::shared_ptr<Element>> elements;
+    std::vector<NotNullSharedPtr<Element>> elements;
 
-    Program(std::optional<NodeLocation> location,
-        std::vector<std::shared_ptr<Element>> elements) : ASTNode(location), elements(std::move(elements)) {}
+    using ASTNode::ASTNode;
+    Program(std::optional<NodeLocation> location, std::vector<NotNullSharedPtr<Element>> elements) 
+      : ASTNode(location)
+      , elements(std::move(elements)) {}
     
     void print(std::ostream& out, int indent = 0) const override {
         out << std::string(indent, ' ') << "Program:\n";
@@ -69,16 +76,17 @@ public:
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
         Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
       ) const override;
 };
 
 // List: ( elements... )
 class List : public Element {
 public:
-    std::vector<InterpreterNodePtr> elements;
+    std::vector<NotNullSharedPtr<InterpreterNode>> elements;
 
-    List(std::optional<NodeLocation> location, std::vector<InterpreterNodePtr> elements) : Element(location), elements(std::move(elements)) {}
+    using Element::Element;
+    List(std::optional<NodeLocation> location, std::vector<NotNullSharedPtr<InterpreterNode>> elements) : Element(location), elements(std::move(elements)) {}
 
     void print(std::ostream& out, int indent = 0) const override {
       out << "(";
@@ -91,35 +99,40 @@ public:
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
         Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
       ) const override;
 };
 
 class Quote : public Element {
+private:
+    std::optional<InterpreterNodePtr> inner;
 public:
-    InterpreterNodePtr inner;
 
-    Quote(std::optional<NodeLocation> location, InterpreterNodePtr inner) : Element(location), inner(std::move(inner)) {}
+    Quote() : Element(location), inner(std::nullopt) {}
+    Quote(std::optional<NodeLocation> location, InterpreterNodePtr inner) : Element(location), inner(inner) {}
+
+    InterpreterNodePtr get_inner() const { return *inner; }
 
     void print(std::ostream& out, int indent = 0) const override {
         out << std::string(indent, ' ') << "'";
-        inner->print(out, indent);
+        get_inner()->print(out, indent);
     }
 
 
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
         Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
       ) const override;
 };
 
 // Atom: Identifier
 class Atom : public Element {
 public:
-    std::shared_ptr<Identifier> identifier;
+    NotNullSharedPtr<Identifier> identifier;
+    using Element::Element;
 
-    Atom(std::optional<NodeLocation> location, std::shared_ptr<Identifier> identifier) : Element(location), identifier(identifier) {}
+    Atom(std::optional<NodeLocation> location, NotNullSharedPtr<Identifier> identifier) : Element(location), identifier(identifier) {}
     
     void print(std::ostream& out, int indent = 0) const override {
         out << std::string(indent, ' ') << "Atom: ";
@@ -130,13 +143,14 @@ public:
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
         Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
       ) const override;
 };
 
 // Literal values
 class Literal : public Element {
 public:
+    using Element::Element;
     enum class Type { INTEGER, REAL, BOOLEAN, NULLVAL };
     Type type;
     
@@ -175,7 +189,7 @@ public:
     EvaluationResult<InterpreterNodePtr> evaluate(
         InterpreterNodePtr self,
         Interpreter& Interpreter,
-        std::deque<std::shared_ptr<InterpreterNode>> args
+        std::deque<NotNullSharedPtr<InterpreterNode>> args
       ) const override;
 
     bool less(const Interpreter& interpreter, const Literal& literal) const;
@@ -186,36 +200,36 @@ public:
     bool greatereq(const Interpreter& interpreter, const Literal& literal) const { return greater(interpreter, literal) || eq(interpreter, literal); }
 };
 
-inline std::shared_ptr<Literal> makeLiteralInt(std::optional<NodeLocation> location, int intValue) {
-  auto l = std::make_shared<Literal>(location);
+inline NotNullSharedPtr<Literal> makeLiteralInt(std::optional<NodeLocation> location, int intValue) {
+  auto l = make_nn_shared<Literal>(location);
   l->intValue = intValue;
   l->type = Literal::Type::INTEGER;
 
   return l;
 }
 
-inline std::shared_ptr<Literal> makeLiteralReal(std::optional<NodeLocation> location, double realValue) {
-  auto l = std::make_shared<Literal>(location);
+inline NotNullSharedPtr<Literal> makeLiteralReal(std::optional<NodeLocation> location, double realValue) {
+  auto l = make_nn_shared<Literal>(location);
   l->realValue = realValue;
   l->type = Literal::Type::REAL;
 
   return l;
 }
 
-inline std::shared_ptr<Literal> makeLiteralBool(std::optional<NodeLocation> location, bool boolValue) {
-  auto l = std::make_shared<Literal>(location);
+inline NotNullSharedPtr<Literal> makeLiteralBool(std::optional<NodeLocation> location, bool boolValue) {
+  auto l = make_nn_shared<Literal>(location);
   l->boolValue = boolValue;
   l->type = Literal::Type::BOOLEAN;
 
   return l;
 }
 
-inline std::shared_ptr<Literal> makeLiteralNil(std::optional<NodeLocation> location) {
-  auto l = std::make_shared<Literal>(location);
+inline NotNullSharedPtr<Literal> makeLiteralNil(std::optional<NodeLocation> location) {
+  auto l = make_nn_shared<Literal>(location);
   l->type = Literal::Type::NULLVAL;
 
   return l;
 }
 
-std::shared_ptr<InterpreterNode> null_node();
+NotNullSharedPtr<InterpreterNode> null_node();
 

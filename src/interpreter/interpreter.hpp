@@ -1,8 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <functional>
 #include <initializer_list>
-#include <memory>
 #include <optional>
 #include <ostream>
 #include <sstream>
@@ -17,10 +17,10 @@
 #include <fmt/base.h>
 #include <fmt/format.h>
 #include <utility>
-#include <gsl/pointers>
 
 
 #include "utils/utils.hpp"
+#include "utils/shared_not_null.hpp"
 #include "interpreter/special_forms.hpp"
 #include "parser/node_location.hpp"
 
@@ -29,9 +29,6 @@ class InterpreterNode;
 
 template <typename R>
 class EvaluationResultThrowed;
-
-template<typename T>
-using NotNullSharedPtr = gsl::not_null<std::shared_ptr<T>>;
 
 enum class EvaluationResultType { OK, BREAK, RETURN };
 template <typename R>
@@ -45,11 +42,14 @@ private:
   EvaluationResultType type;
   union {
     R value;
-    std::shared_ptr<InterpreterNode> return_value;
+    std::optional<NotNullSharedPtr<InterpreterNode>> return_value;
   };
 
-  EvaluationResult(std::shared_ptr<InterpreterNode> value,
-      EvaluationResultType type) : return_value(std::move(value)), type(type) {}
+  EvaluationResult(std::optional<NotNullSharedPtr<InterpreterNode>> value,
+      EvaluationResultType type) : return_value(value), type(type) {}
+
+  EvaluationResult(std::nullptr_t value,
+      EvaluationResultType type) : return_value(std::nullopt), type(type) {}
 public:
 
   class EvaluationResultThrowed;
@@ -58,10 +58,10 @@ public:
 
   class EvaluationResultThrowed {
     friend EvaluationResult;
-    std::shared_ptr<InterpreterNode> return_value;
+    std::optional<NotNullSharedPtr<InterpreterNode>> return_value;
     EvaluationResultType type;
 
-    EvaluationResultThrowed(std::shared_ptr<InterpreterNode> return_value, EvaluationResultType type) 
+    EvaluationResultThrowed(std::optional<NotNullSharedPtr<InterpreterNode>> return_value, EvaluationResultType type) 
       : return_value(return_value)
       , type(type) {}
 
@@ -100,16 +100,16 @@ public:
   }
 
   const R& get_return() const { 
-    bool kek;
     assert_unverbose(type == EvaluationResultType::RETURN, "should be return");
-    return value;
+    return *return_value;
   }
 
   ~EvaluationResult() {
     if (type == EvaluationResultType::OK) {
       value.~R();
     } else {
-      return_value.~shared_ptr<InterpreterNode>();
+      using namespace std;
+      return_value.~optional<NotNullSharedPtr<InterpreterNode>>();
     }
   }
 };
@@ -135,11 +135,12 @@ public:
   virtual ~InterpreterNode() = default;
 
   explicit InterpreterNode(std::optional<NodeLocation> location) : location(location) {}
+  explicit InterpreterNode() : location(std::nullopt) {}
 
-  virtual EvaluationResult<std::shared_ptr<InterpreterNode>> evaluate(
-      std::shared_ptr<InterpreterNode> self,
+  virtual EvaluationResult<NotNullSharedPtr<InterpreterNode>> evaluate(
+      NotNullSharedPtr<InterpreterNode> self,
       Interpreter& Interpreter,
-      std::deque<std::shared_ptr<InterpreterNode>> args
+      std::deque<NotNullSharedPtr<InterpreterNode>> args
     ) const = 0;
 
   virtual void print(std::ostream& out, int indent = 0) const = 0;
@@ -151,7 +152,8 @@ public:
   }
 };
 
-using InterpreterNodePtr = std::shared_ptr<InterpreterNode>;
+using InterpreterNodePtr = NotNullSharedPtr<InterpreterNode>;
+using InterpreterNodeNNPtr = NotNullSharedPtr<InterpreterNode>;
 
 class CallableNode : public InterpreterNode {
 public:
@@ -177,11 +179,11 @@ private:
         std::hash<std::string_view>
     >;
 
-    std::unordered_map<std::string, std::shared_ptr<InterpreterNode>, TransparentStringHash, std::equal_to<>> variables;
+    std::unordered_map<std::string, NotNullSharedPtr<InterpreterNode>, TransparentStringHash, std::equal_to<>> variables;
 
   public:
-    std::shared_ptr<InterpreterNode> get(std::string_view name);
-    void set(std::string_view name, std::shared_ptr<InterpreterNode>);
+    std::optional<NotNullSharedPtr<InterpreterNode>> get(std::string_view name);
+    void set(std::string_view name, NotNullSharedPtr<InterpreterNode>);
   };
 
 private:
@@ -204,29 +206,32 @@ public:
   };
   friend ContextLayerToken;
 
-  std::shared_ptr<InterpreterNode> get(std::string_view name);
-  void set(std::string_view name, std::shared_ptr<InterpreterNode> value);
+  std::optional<NotNullSharedPtr<InterpreterNode>> get(std::string_view name);
+  void set(std::string_view name, NotNullSharedPtr<InterpreterNode> value);
   ContextLayerToken create_layer();
   ContextLayerToken create_layer(std::unordered_set<std::string> exceptions);
   ContextLayerToken create_layer(std::initializer_list<std::string> exceptions) { 
     return create_layer(std::unordered_set(exceptions));
   }
 
-  void set_in_root(std::string_view name, std::shared_ptr<InterpreterNode> value);
+  void set_in_root(std::string_view name, NotNullSharedPtr<InterpreterNode> value);
 
   Context();
+
+  std::string to_string() const;
+  void print() const;
 
 };
 
 class InterpreterStack {
 private:
-  std::deque<std::shared_ptr<InterpreterNode>> content;
+  std::deque<NotNullSharedPtr<InterpreterNode>> content;
 public:
 
-  void push(std::shared_ptr<InterpreterNode> value);
+  void push(NotNullSharedPtr<InterpreterNode> value);
   int available() { return content.size(); }
-  std::shared_ptr<InterpreterNode> pop(Interpreter& interpreter, InterpreterNodePtr node);
-  std::optional<std::shared_ptr<InterpreterNode>> pop_or_null();
+  NotNullSharedPtr<InterpreterNode> pop(Interpreter& interpreter, InterpreterNodePtr node);
+  std::optional<NotNullSharedPtr<InterpreterNode>> pop_or_null();
   bool is_empty();
 
 };

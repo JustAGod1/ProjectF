@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
   std::string source = buf.str();
   Scanner s{source};
 
-  std::shared_ptr<Program> p = std::make_shared<Program>(std::nullopt, std::vector<std::shared_ptr<Element>>{});
+  NotNullSharedPtr<Program> p = make_nn_shared<Program>(std::nullopt, std::vector<NotNullSharedPtr<Element>>{});
   yy::parser parser{s, p};
 
   int code = parser.parse();

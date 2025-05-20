@@ -37,7 +37,7 @@
 "false"       { return yy::parser::make_FALSE(loc); }
 -?[0-9]+        { return yy::parser::make_INTEGER(atoi(yytext), loc); }
 -?[0-9]+\.[0-9]+ { return yy::parser::make_REAL(atof(yytext), loc); }
-[a-zA-Z][a-zA-Z0-9]* { return yy::parser::make_IDENTIFIER(std::make_shared<Identifier>(loc, std::string{yytext}), loc); }
+[a-zA-Z][a-zA-Z0-9]* { return yy::parser::make_IDENTIFIER(make_nn_shared<Identifier>(loc, std::string{yytext}), loc); }
 .           { 
                 // Create error token containing the invalid character
                 std::string error_char(1, *yytext);
