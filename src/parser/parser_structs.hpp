@@ -68,9 +68,11 @@ public:
       , elements(std::move(elements)) {}
     
     void print(std::ostream& out, int indent = 0) const override {
-        out << std::string(indent, ' ') << "Program:\n";
+        out << "Program:\n";
         for (const auto& el : elements) {
-            el->print(out, indent + 2);
+          out << "  ";
+          el->print(out);
+          out << std::endl;
         }
     }
     EvaluationResult<InterpreterNodePtr> evaluate(
@@ -90,10 +92,12 @@ public:
 
     void print(std::ostream& out, int indent = 0) const override {
       out << "(";
-        for (const auto& el : elements) {
-            el->print(out, 0);
-            out << " ";
+      for (int i = 0; i < elements.size(); i++) {
+        elements[i]->print(out, 0);
+        if (i < elements.size() - 1) {
+          out << " ";
         }
+      }
       out << ")";
     }
     EvaluationResult<InterpreterNodePtr> evaluate(
@@ -135,8 +139,7 @@ public:
     Atom(std::optional<NodeLocation> location, NotNullSharedPtr<Identifier> identifier) : Element(location), identifier(identifier) {}
     
     void print(std::ostream& out, int indent = 0) const override {
-        out << std::string(indent, ' ') << "Atom: ";
-        identifier->print(out, 0);
+      out << identifier->name;
     }
 
 
@@ -177,10 +180,9 @@ public:
     Literal(std::optional<NodeLocation> location) : Element(location) {}
     
     void print(std::ostream& out, int indent = 0) const override {
-        out << std::string(indent, ' ') << "Literal: ";
         switch (type) {
-            case Type::INTEGER: out << intValue << "i"; break;
-            case Type::REAL: out << realValue << "d"; break;
+            case Type::INTEGER: out << intValue; break;
+            case Type::REAL: out << realValue; break;
             case Type::BOOLEAN: out << (boolValue ? "true" : "false"); break;
             case Type::NULLVAL: out << "null"; break;
         }
