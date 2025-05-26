@@ -35,6 +35,7 @@
 ")"           { return yy::parser::make_RPAREN(loc); }
 "true"        { return yy::parser::make_TRUE(loc); }
 "false"       { return yy::parser::make_FALSE(loc); }
+"null"       { return yy::parser::make_NIL(loc); }
 -?[0-9]+        { return yy::parser::make_INTEGER(atoi(yytext), loc); }
 -?[0-9]+\.[0-9]+ { return yy::parser::make_REAL(atof(yytext), loc); }
 [a-zA-Z][a-zA-Z0-9]* { return yy::parser::make_IDENTIFIER(make_nn_shared<Identifier>(loc, std::string{yytext}), loc); }

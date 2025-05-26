@@ -43,7 +43,7 @@ public:
     std::string name;
     using ASTNode::ASTNode;
 
-    Identifier(std::optional<NodeLocation> location, std::string name) : ASTNode(location), name(std::move(name)) {}
+    Identifier(std::optional<NodeLocation> location, String name) : ASTNode(location), name(to_normal_string(name)) {}
 
     void print(std::ostream& out, int indent = 0) const override {
         out << std::string(indent, ' ') << "Identifier: " << name << "\n";

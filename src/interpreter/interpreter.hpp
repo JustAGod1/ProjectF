@@ -240,7 +240,7 @@ class EvaluatonException;
 class Interpreter {
 private:
   Context context;
-  const std::string_view source;
+  const StringView source;
 
   friend class EvaluatonException;
 
@@ -258,7 +258,7 @@ private:
   }
 
 public:
-  explicit Interpreter(std::string_view source) : source(source) {
+  explicit Interpreter(StringView source) : source(source) {
     register_special_forms(context);
   }
 

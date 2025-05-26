@@ -1,5 +1,6 @@
 #pragma once
-#include <string_view>
+
+#include "utils/string_type.hpp"
 #include "parser/location.hh"
 
 class NodeLocation : public yy::location {
@@ -17,5 +18,5 @@ public:
     char_offset_begin = char_offset_end;
   }
 
-  void print_line_error(const std::string_view s, std::ostream& out) const;
+  void print_line_error(const StringView s, std::ostream& out) const;
 };

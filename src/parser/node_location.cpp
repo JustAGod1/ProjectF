@@ -1,5 +1,4 @@
 #include "parser/node_location.hpp"
-#include "interpreter/interpreter.hpp"
 #include <algorithm>
 #include <string_view>
 #include <vector>
@@ -8,7 +7,7 @@
 #include <fmt/format.h>
 #include <fmt/color.h>
 
-void NodeLocation::print_line_error(const std::string_view s, std::ostream& out) const {
+void NodeLocation::print_line_error(const StringView s, std::ostream& out) const {
   std::vector<std::string> line_numbers;
 
   int max_prefix_len = 0;
@@ -42,13 +41,13 @@ void NodeLocation::print_line_error(const std::string_view s, std::ostream& out)
   };
   print_line_num(current_line);
   for (int i = left; i <= right; i++) {
-    char v = s[i];
+    Char v = s[i];
     if (char_offset_begin <= i && i < char_offset_end) {
       fmt::print(fmt::fg(fmt::color::red),
           "{}",
-          std::string_view{&v, 1});
+          to_normal_string(String{&v, 1}));
     } else {
-      std::cout << v;
+      fmt::print("{}", to_normal_string(String{&v, 1}));
     }
     if (v == '\n') {
       print_line_num(++current_line);

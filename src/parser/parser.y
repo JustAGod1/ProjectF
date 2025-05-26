@@ -16,6 +16,7 @@
     #include <vector>
     #include "parser/node_location.hpp" 
     #include "parser_structs.hpp"
+    #include "utils/string_type.hpp"
     
     
     using ASTNodePtr = NotNullSharedPtr<ASTNode>;
@@ -30,7 +31,6 @@
 }
 
 %code top {
-    #include <string>
     #include <iostream>
     #include "lexer.hpp"
     #include "parser.hpp"
@@ -65,11 +65,12 @@ namespace yy
 
 %locations
 
-%token <std::string> ERROR "error token"
+%token <String> ERROR "error token"
 %token END 0 "end of file"
 %token LPAREN "(" RPAREN ")"
 %token QUOTE "'"
 %token TRUE "true" FALSE "false"
+%token NIL "null"
 %token <NotNullSharedPtr<Identifier>> IDENTIFIER
 %token <int> INTEGER
 %token <double> REAL
