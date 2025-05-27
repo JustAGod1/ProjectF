@@ -1,6 +1,7 @@
 #include "parser/node_location.hpp"
 #include <algorithm>
 #include <string_view>
+#include <unistd.h>
 #include <vector>
 #include <iostream>
 #include <cctype>
@@ -39,17 +40,23 @@ void NodeLocation::print_line_error(const StringView s, std::ostream& out) const
     }
     fmt::print(": ");
   };
+  bool tty = isatty(fileno(stdout));
   print_line_num(current_line);
   for (int i = left; i <= right; i++) {
     Char v = s[i];
     if (char_offset_begin <= i && i < char_offset_end) {
-      fmt::print(fmt::fg(fmt::color::red),
-          "{}",
-          to_normal_string(String{&v, 1}));
+      if (tty) {
+        fmt::print(fmt::fg(fmt::color::red),
+            "{}",
+            to_normal_string(String{&v, 1}));
+      } else {
+        fmt::print("{}",
+            to_normal_string(String{&v, 1}));
+      }
     } else {
       fmt::print("{}", to_normal_string(String{&v, 1}));
     }
-    if (v == '\n') {
+    if (v == U'\n') {
       print_line_num(++current_line);
       current_length = 0;
       continue;
@@ -67,16 +74,26 @@ void NodeLocation::print_line_error(const StringView s, std::ostream& out) const
     fmt::print("{}",
         std::string(min_left+3, ' '));
 
-    fmt::print(fmt::emphasis::bold | fmt::fg(fmt::color::white),
-        "{}",
-        std::string(max_right - min_left + 1, '~'));
+    if (tty) {
+      fmt::print(fmt::emphasis::bold | fmt::fg(fmt::color::white),
+          "{}",
+          std::string(max_right - min_left + 1, '~'));
+    } else {
+      fmt::print("{}",
+          std::string(max_right - min_left + 1, '~'));
+    }
   } else {
     fmt::print("{}",
         std::string(begin.column+3-1, ' '));
 
-    fmt::print(fmt::emphasis::bold | fmt::fg(fmt::color::white),
-        "{}",
-        std::string(end.column - begin.column, '~'));
+    if (tty) {
+      fmt::print(fmt::emphasis::bold | fmt::fg(fmt::color::white),
+          "{}",
+          std::string(end.column - begin.column, '~'));
+    } else {
+      fmt::print("{}",
+          std::string(end.column - begin.column, '~'));
+    }
   }
   out << std::endl;
 }

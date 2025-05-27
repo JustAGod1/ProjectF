@@ -5,7 +5,6 @@ compile_commands.json
 
 src/parser/parser.hpp
 src/parser/parser.cpp
-src/parser/lexer.cpp
 
 projf
 

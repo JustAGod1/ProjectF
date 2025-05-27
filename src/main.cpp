@@ -1,3 +1,4 @@
+#include "fmt/base.h"
 #include "parser/parser.hpp"
 #include "parser/lexer.hpp"
 #include <deque>
@@ -17,6 +18,7 @@ int main(int argc, char** argv) {
   std::ifstream input{argv[1]};
   std::stringstream buf;
   buf << input.rdbuf();
+
 
   std::string source = buf.str();
   std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> converter;
