@@ -3,7 +3,7 @@
     (
       (prog () 
         (
-          (setq result x)lol
+          (setq result x)
           (while (greater power 1)
             (prog ()
               (

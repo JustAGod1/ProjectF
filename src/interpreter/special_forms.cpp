@@ -378,7 +378,9 @@ public:
 
     expect_n_args(args, sizeof...(T));
 
-    std::tuple<std::optional<EvaluationResult<NotNullSharedPtr<T>>>...> argss{pop_type<T>(args, self, interpreter)...};
+    std::tuple<std::optional<EvaluationResult<NotNullSharedPtr<T>>>...> argss{
+      pop_type<T>(args, self, interpreter)...
+    };
 
     auto invoker = [&]<typename... IT>(const IT&... args) { 
       return execute(interpreter, args...);
@@ -387,7 +389,8 @@ public:
     return std::apply(invoker, argss);
   }
 
-  virtual EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<T>...) const = 0;
+  virtual EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter,
+      NotNullSharedPtr<T>...) const = 0;
 };
 
 template<typename F>
@@ -469,7 +472,8 @@ class LengthFunction : public SimpleFunction<List> {
 public:
   std::string description() const override { return "length"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<List> arg) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter,
+      NotNullSharedPtr<List> arg) const override {
     return makeLiteralInt(std::nullopt, arg->elements.size());
   }
 };
@@ -490,10 +494,14 @@ class ConsFunction : public SimpleFunction<InterpreterNode, List> {
 public:
   std::string description() const override { return "cons"; }
 
-  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, InterpreterNodePtr val, NotNullSharedPtr<List> arg) const override {
+  EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter,
+      InterpreterNodePtr val,
+      NotNullSharedPtr<List> arg) const override {
     std::vector<InterpreterNodeNNPtr> result{};
     result.push_back(val);
-    std::ranges::copy(arg->elements.begin(), arg->elements.end(), std::back_inserter(result));
+    std::ranges::copy(arg->elements.begin(),
+        arg->elements.end(),
+        std::back_inserter(result));
     return make_nn_shared<List>(std::nullopt, result);
   }
 };
@@ -579,7 +587,7 @@ public:
 
 NotNullSharedPtr<SpecialFormNode> and_func = make_form<BoolBiFunction>("and", [](bool a, bool b){ return a && b; });
 NotNullSharedPtr<SpecialFormNode> or_func = make_form<BoolBiFunction>("or", [](bool a, bool b){ return a || b; });
-NotNullSharedPtr<SpecialFormNode> xor_func = make_form<BoolBiFunction>("or", [](bool a, bool b){ return a != b; });
+NotNullSharedPtr<SpecialFormNode> xor_func = make_form<BoolBiFunction>("xor", [](bool a, bool b){ return a != b; });
 
 
 class BoolNotFunction : public SimpleFunction<Literal> {

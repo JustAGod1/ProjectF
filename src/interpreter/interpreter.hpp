@@ -31,6 +31,7 @@ template <typename R>
 class EvaluationResultThrowed;
 
 enum class EvaluationResultType { OK, BREAK, RETURN };
+
 template <typename R>
 class EvaluationResult {
 private:
