@@ -607,7 +607,7 @@ public:
   std::string description() const override { return "eval"; }
 
   EvaluationResult<InterpreterNodePtr> run(Interpreter& interpreter, NotNullSharedPtr<InterpreterNode> a) const override {
-    return a;
+    return eval(interpreter, a);
   }
 };
 
